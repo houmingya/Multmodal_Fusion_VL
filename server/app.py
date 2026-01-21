@@ -285,11 +285,23 @@ async def text_to_image_search(text_query: str = Form(...), top_k: int = Form(5)
         top_results = sorted(similarities.items(), key=lambda x: x[1], reverse=True)[:top_k]
 
         logger.info(f"Search Results: {len(top_results)} images found")
+        import base64
+
+        def image_to_base64(image_path):
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode('utf-8')
 
         return JSONResponse({
             "status": "success",
             "query": text_query,
-            "results": [{"image": img, "score": score} for img, score in top_results]
+            "results": [
+                    {
+                        "image": img,
+                        "score": score,
+                        "image_base64": image_to_base64(os.path.join(IMAGE_LIBRARY_PATH, img))
+                    }
+                    for img, score in top_results
+                ]
         })
 
     except Exception as e:
