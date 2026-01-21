@@ -1,0 +1,25 @@
+# ====================================
+# Conda环境配置文件 - 服务器端
+# ====================================
+# 使用方法：conda env create -f environment_server.yml
+
+name: multimodal_server
+
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - fastapi==0.104.1
+    - uvicorn[standard]==0.24.0
+    - torch>=2.0.0
+    - torchvision>=0.15.0
+    - modelscope>=1.11.0
+    - transformers>=4.35.0
+    - Pillow>=10.0.0
+    - faiss-cpu>=1.7.4
+    - numpy>=1.24.0
+    - python-multipart>=0.0.6

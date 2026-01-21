@@ -1,0 +1,18 @@
+# ====================================
+# Conda环境配置文件 - 本地端
+# ====================================
+# 使用方法：conda env create -f environment_client.yml
+
+name: multimodal_client
+
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - gradio>=4.0.0
+    - requests>=2.31.0
+    - Pillow>=10.0.0
