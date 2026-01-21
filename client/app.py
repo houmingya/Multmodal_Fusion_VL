@@ -151,7 +151,7 @@ if __name__ == "__main__":
     print("  多模态融合客户端")
     print("="*50)
     print(f"  服务器: {SERVER_URL}")
-  ··············  print("="*50 + "\n")
+    print("="*50 + "\n")
     
     demo = build_interface()
     demo.launch(

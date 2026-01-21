@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ====================================
 SERVER_HOST = "0.0.0.0"  # 服务器监听地址
 SERVER_PORT = 8000       # 服务器端口
-IMAGE_LIBRARY_PATH = "./server/image_library"  # 使用服务器端图片库
+IMAGE_LIBRARY_PATH = "./image_library"  # 使用服务器端图片库
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # 创建图片库目录
