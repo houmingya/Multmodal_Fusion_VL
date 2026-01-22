@@ -6,19 +6,18 @@ import requests
 import base64
 from io import BytesIO
 from PIL import Image
-
-SERVER_URL = "http://localhost:8000"
+import config
 
 def check_server_health():
     try:
-        response = requests.get(f"{SERVER_URL}/health", timeout=5)
+        response = requests.get(f"{config.SERVER_URL}/health", timeout=config.HEALTH_CHECK_TIMEOUT)
         if response.status_code == 200:
             data = response.json()
             return f"✅ 连接成功 | 设备: {data['device'].upper()} | 图片库: {data['image_library_size']} 张 | 状态: 正常运行"
         else:
             return f"❌ 服务器响应异常 (状态码: {response.status_code})"
     except requests.exceptions.ConnectionError:
-        return f"❌ 无法连接到服务器 ({SERVER_URL}) - 请确保服务器已启动"
+        return f"❌ 无法连接到服务器 ({config.SERVER_URL}) - 请确保服务器已启动"
     except requests.exceptions.Timeout:
         return "⏱️ 连接超时 - 服务器响应过慢"
     except Exception as e:
@@ -36,10 +35,10 @@ def vqa_inference(image, question):
         img_byte_arr.seek(0)
         
         response = requests.post(
-            f"{SERVER_URL}/vqa",
+            f"{config.SERVER_URL}/vqa",
             files={'image': ('image.jpg', img_byte_arr, 'image/jpeg')},
             data={'question': question.strip()},
-            timeout=60
+            timeout=config.VQA_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -52,7 +51,7 @@ def vqa_inference(image, question):
     except requests.exceptions.Timeout:
         return "⏱️ 请求超时,服务器处理时间过长,请稍后重试"
     except requests.exceptions.ConnectionError:
-        return f"❌ 无法连接到服务器 ({SERVER_URL})"
+        return f"❌ 无法连接到服务器 ({config.SERVER_URL})"
     except Exception as e:
         return f"❌ 发生错误: {str(e)}"
 
@@ -62,9 +61,9 @@ def text2image_search(text_query, top_k):
     
     try:
         response = requests.post(
-            f"{SERVER_URL}/text2image_search",
+            f"{config.SERVER_URL}/text2image_search",
             data={'text_query': text_query.strip(), 'top_k': int(top_k)},
-            timeout=30
+            timeout=config.SEARCH_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -96,16 +95,16 @@ def text2image_search(text_query, top_k):
     except requests.exceptions.Timeout:
         return [], "⏱️ 请求超时,请稍后重试"
     except requests.exceptions.ConnectionError:
-        return [], f"❌ 无法连接到服务器 ({SERVER_URL})"
+        return [], f"❌ 无法连接到服务器 ({config.SERVER_URL})"
     except Exception as e:
         return [], f"❌ 发生错误: {str(e)}"
 
 def build_interface():
-    with gr.Blocks(title="多模态融合演示系统") as demo:
+    with gr.Blocks(title=config.APP_TITLE) as demo:
         gr.Markdown(
-            """
-            # 🚀 多模态融合演示系统
-            ### 基于 CLIP + BLIP 的视觉语言理解平台
+            f"""
+            # 🚀 {config.APP_TITLE}
+            {config.APP_DESCRIPTION}
             """
         )
         
@@ -129,7 +128,8 @@ def build_interface():
                         type="pil", 
                         height=300,
                         sources=["upload", "clipboard"],
-                        show_label=True
+                        show_label=True,
+                        file_types=[f".{ext}" for ext in config.ALLOWED_IMAGE_TYPES]
                     )
                     vqa_question = gr.Textbox(
                         label="❓ 请输入您的问题", 
@@ -185,8 +185,8 @@ def build_interface():
                     search_top_k = gr.Slider(
                         label="📊 返回数量", 
                         minimum=1, 
-                        maximum=10, 
-                        value=5, 
+                        maximum=config.MAX_TOP_K, 
+                        value=config.DEFAULT_TOP_K, 
                         step=1,
                         info="选择要返回的图片数量"
                     )
@@ -259,7 +259,7 @@ def build_interface():
         with gr.Accordion("⚙️ 技术说明", open=False):
             gr.Markdown(
                 """
-                - **VQA 模型**: 基于 BLIP/LLaVA 多模态理解模型
+                - **VQA 模型**: Qwen2.5-VL-3B-Instruct (4-bit量化)
                 - **检索模型**: CLIP 中文版跨模态检索
                 - **架构**: FastAPI 服务端 + Gradio 客户端
                 - **GPU 要求**: 推荐 12GB+ 显存
@@ -272,84 +272,29 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("  🚀 多模态融合客户端 - 启动中")
     print("="*60)
-    print(f"  📡 服务器地址: {SERVER_URL}")
-    print(f"  🌐 本地访问: http://127.0.0.1:7860")
+    print(f"  📡 服务器地址: {config.SERVER_URL}")
+    print(f"  🌐 本地访问: http://{config.GRADIO_SERVER_NAME}:{config.GRADIO_SERVER_PORT}")
     print("="*60 + "\n")
+    
+    # 加载CSS样式
+    import os
+    css_path = os.path.join(os.path.dirname(__file__), "styles.css")
+    with open(css_path, "r", encoding="utf-8") as f:
+        custom_css = f.read().replace("{FONT_FAMILY}", config.FONT_FAMILY)
     
     demo = build_interface()
     demo.launch(
-        server_name="127.0.0.1",
-        server_port=7860,
-        share=False,
-        inbrowser=True,
+        server_name=config.GRADIO_SERVER_NAME,
+        server_port=config.GRADIO_SERVER_PORT,
+        share=config.GRADIO_SHARE,
+        inbrowser=config.GRADIO_INBROWSER,
         quiet=False,
         show_error=True,
-        theme=gr.themes.Soft(
+        theme=getattr(gr.themes, config.GRADIO_THEME.capitalize())(
             primary_hue="blue",
             secondary_hue="indigo",
             neutral_hue="slate",
             font=["Microsoft YaHei", "SimHei", "sans-serif"]
         ),
-        css="""
-        .gradio-container {
-            max-width: 1600px !important;
-        }
-        h1 {
-            font-size: 2.2em !important; 
-            margin: 16px 0 !important;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 700;
-            text-align: center;
-        }
-        h3 {
-            text-align: center;
-            color: #666;
-            margin-top: -8px;
-            margin-bottom: 20px;
-        }
-        .gr-button {
-            min-height: 44px !important;
-            border-radius: 10px !important;
-            transition: all 0.3s ease !important;
-            font-weight: 500 !important;
-        }
-        .gr-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.15) !important;
-        }
-        .gr-button-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        }
-        .gr-box {
-            padding: 18px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        .gr-form {
-            border-radius: 12px !important;
-        }
-        .gr-input, .gr-textarea {
-            border-radius: 8px !important;
-            border: 1.5px solid #e0e0e0 !important;
-        }
-        .gr-input:focus, .gr-textarea:focus {
-            border-color: #667eea !important;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1) !important;
-        }
-        .tab-nav button {
-            font-size: 1.05em !important;
-            padding: 14px 24px !important;
-            font-weight: 500 !important;
-        }
-        .tab-nav button.selected {
-            background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%) !important;
-        }
-        label {
-            font-weight: 600 !important;
-            color: #333 !important;
-            margin-bottom: 8px !important;
-        }
-        """
+        css=custom_css
     )

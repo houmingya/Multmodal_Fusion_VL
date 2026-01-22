@@ -1,0 +1,80 @@
+/* ====================================
+ * Gradio 界面自定义样式
+ * ==================================== */
+
+.gradio-container {
+    max-width: 1600px !important;
+}
+
+h1 {
+    font-size: 2.2em !important; 
+    margin: 16px 0 !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+    text-align: center;
+}
+
+h3 {
+    text-align: center;
+    color: #666;
+    margin-top: -8px;
+    margin-bottom: 20px;
+}
+
+* {
+    font-family: {FONT_FAMILY};
+}
+
+.gr-button {
+    min-height: 44px !important;
+    border-radius: 10px !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+}
+
+.gr-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15) !important;
+}
+
+.gr-button-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.gr-box {
+    padding: 18px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.gr-form {
+    border-radius: 12px !important;
+}
+
+.gr-input, .gr-textarea {
+    border-radius: 8px !important;
+    border: 1.5px solid #e0e0e0 !important;
+}
+
+.gr-input:focus, .gr-textarea:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.1) !important;
+}
+
+.tab-nav button {
+    font-size: 1.05em !important;
+    padding: 14px 24px !important;
+    font-weight: 500 !important;
+}
+
+.tab-nav button.selected {
+    background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%) !important;
+}
+
+label {
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 8px !important;
+}

@@ -10,14 +10,14 @@ multimodal_fusion/
 ├── server/                 # 服务器端代码（部署在12G显存工作站）
 │   ├── app.py             # FastAPI服务主程序
 │   ├── requirements.txt   # 服务器端依赖
-│   └── image_library/     # 图片库目录（自动创建）
-│       ├── cat.jpg        # 示例图片1
-│       ├── dog.jpg        # 示例图片2
-│       └── sunset.jpg     # 示例图片3
+│   └── image_library/     # 图片库目录
+│       └── *.jpg          # 测试图片
 ├── client/                # 本地端代码
 │   ├── app.py             # Gradio可视化界面
+│   ├── config.py          # 客户端配置文件
 │   └── requirements.txt   # 本地端依赖
-└── README.md              # 本文件
+├── README.md              # 完整说明文档
+└── QUICKSTART.md          # 快速开始指南
 ```
 
 ---

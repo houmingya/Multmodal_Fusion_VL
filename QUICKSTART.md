@@ -215,12 +215,8 @@ vqa_model = AutoModelForCausalLM.from_pretrained(
 
 ---
 
-## 📚 下一步
-
-- 查看 [README.md](README.md) 了解详细功能
-- 参考 [常见问题](README.md#-常见问题解决) 解决更多问题
-- 查看 [配置文件](server/config.py) 进行高级定制
-
 ---
 
 **祝使用愉快！** 🎉
+
+更多详细信息请查看 [README.md](README.md)

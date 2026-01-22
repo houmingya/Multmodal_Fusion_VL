@@ -19,21 +19,14 @@ from modelscope import snapshot_download
 # 直接导入 Qwen2.5 VL 的特定类
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, BitsAndBytesConfig
 from qwen_vl_utils import process_vision_info
+import config
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=config.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# ====================================
-# 配置项
-# ====================================
-SERVER_HOST = "0.0.0.0"  # 服务器监听地址
-SERVER_PORT = 8000       # 服务器端口
-IMAGE_LIBRARY_PATH = "./image_library"  # 使用服务器端图片库
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 # 创建图片库目录
-os.makedirs(IMAGE_LIBRARY_PATH, exist_ok=True)
+os.makedirs(config.IMAGE_LIBRARY_PATH, exist_ok=True)
 
 # ====================================
 # 全局变量
@@ -53,7 +46,7 @@ def load_vqa_model():
     """
     global vqa_model, vqa_processor
     try:
-        model_id = "Qwen/Qwen2.5-VL-3B-Instruct"
+        model_id = config.VQA_MODEL_ID
         logger.info(f"正在加载 VQA 模型: {model_id} ...")
 
         # 1. 下载模型
@@ -62,12 +55,7 @@ def load_vqa_model():
         # 2. 加载模型
         # 使用 Qwen2_5_VLForConditionalGeneration 类
         # 启用 4-bit 量化以节省显存 (12GB 显存下推荐)
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,  # 双量化进一步节省显存
-        )
+        quantization_config = BitsAndBytesConfig(**config.VQA_QUANTIZATION_CONFIG)
         
         try:
             logger.info("正在尝试以 4-bit 量化加载模型 (BitsAndBytes)...")
@@ -106,21 +94,21 @@ def load_clip_model():
         logger.info("正在加载 CLIP 中文轻量模型...")
         from modelscope import Model, AutoTokenizer
 
-        model_id = "iic/multi-modal_clip-vit-base-patch16_zh"
+        model_id = config.CLIP_MODEL_ID
 
         clip_model = Model.from_pretrained(model_id)
-        clip_model.to(DEVICE)
+        clip_model.to(config.DEVICE)
         clip_model.eval()
 
         clip_tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         from torchvision import transforms
         clip_preprocessor = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize(config.CLIP_IMAGE_SIZE),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.48145466, 0.4578275, 0.40821073],
-                std=[0.26862954, 0.26130258, 0.27577711]
+                mean=config.CLIP_NORMALIZE_MEAN,
+                std=config.CLIP_NORMALIZE_STD
             )
         ])
 
@@ -138,14 +126,14 @@ def build_image_library():
     """构建图片库索引"""
     global image_library
     try:
-        logger.info(f"构建图片库索引: {IMAGE_LIBRARY_PATH} ...")
-        valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+        logger.info(f"构建图片库索引: {config.IMAGE_LIBRARY_PATH} ...")
+        valid_extensions = config.VALID_IMAGE_EXTENSIONS
         
-        if not os.path.exists(IMAGE_LIBRARY_PATH):
-            logger.warning(f"⚠ 图片库目录不存在: {IMAGE_LIBRARY_PATH}")
+        if not os.path.exists(config.IMAGE_LIBRARY_PATH):
+            logger.warning(f"⚠ 图片库目录不存在: {config.IMAGE_LIBRARY_PATH}")
             return
             
-        image_files = [f for f in os.listdir(IMAGE_LIBRARY_PATH) 
+        image_files = [f for f in os.listdir(config.IMAGE_LIBRARY_PATH) 
                       if os.path.splitext(f.lower())[1] in valid_extensions]
 
         if not image_files:
@@ -153,10 +141,10 @@ def build_image_library():
             return
 
         for img_file in image_files:
-            img_path = os.path.join(IMAGE_LIBRARY_PATH, img_file)
+            img_path = os.path.join(config.IMAGE_LIBRARY_PATH, img_file)
             try:
                 image = Image.open(img_path).convert("RGB")
-                image_tensor = clip_preprocessor(image).unsqueeze(0).to(DEVICE)
+                image_tensor = clip_preprocessor(image).unsqueeze(0).to(config.DEVICE)
                 
                 with torch.no_grad():
                     # 使用 ModelScope CLIP 的 encode_image 方法
@@ -221,15 +209,13 @@ async def visual_question_answering(
             padding=True,
             return_tensors="pt",
         )
-        inputs = inputs.to(DEVICE)
+        inputs = inputs.to(config.DEVICE)
 
         # 4. 推理 - 使用更保守的参数
         with torch.no_grad():
             generated_ids = vqa_model.generate(
                 **inputs, 
-                max_new_tokens=128,  # 减少生成长度以节省显存
-                do_sample=False,  # 使用贪心解码而非采样
-                num_beams=1,  # 不使用束搜索
+                **config.VQA_GENERATION_CONFIG
             )
 
         # 5. 解码 (去掉输入的 token)
@@ -266,7 +252,7 @@ async def text_to_image_search(text_query: str = Form(...), top_k: int = Form(5)
         # 文本编码 - 使用 ModelScope CLIP 的 encode_text 方法
         text_tokens = clip_tokenizer(text_query, return_tensors="pt", padding=True, truncation=True)
         # 将 input_ids 移到 GPU (encode_text 只需要 input_ids)
-        input_ids = text_tokens['input_ids'].to(DEVICE)
+        input_ids = text_tokens['input_ids'].to(config.DEVICE)
 
         with torch.no_grad():
             text_features = clip_model.clip_model.encode_text(input_ids)
@@ -298,7 +284,7 @@ async def text_to_image_search(text_query: str = Form(...), top_k: int = Form(5)
                     {
                         "image": img,
                         "score": score,
-                        "image_base64": image_to_base64(os.path.join(IMAGE_LIBRARY_PATH, img))
+                        "image_base64": image_to_base64(os.path.join(config.IMAGE_LIBRARY_PATH, img))
                     }
                     for img, score in top_results
                 ]
@@ -316,7 +302,7 @@ async def health_check():
         "vqa_model_loaded": vqa_model is not None,
         "clip_model_loaded": clip_model is not None,
         "image_library_size": len(image_library),
-        "device": DEVICE
+        "device": config.DEVICE
     }
     
     if torch.cuda.is_available():
@@ -327,4 +313,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
+    uvicorn.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT)
