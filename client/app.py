@@ -104,107 +104,89 @@ def build_interface():
         gr.Markdown(
             f"""
             # 🚀 {config.APP_TITLE}
-            {config.APP_DESCRIPTION}
+            📡 {check_server_health()}
             """
         )
         
-        with gr.Row():
-            server_status = gr.Textbox(
-                label="📡 服务器状态", 
-                value="🔄 点击右侧按钮检查连接状态", 
-                interactive=False, 
-                scale=5,
-                max_lines=1
-            )
-            check_btn = gr.Button("🔄 检查连接", size="sm", scale=1, variant="secondary")
-        check_btn.click(check_server_health, outputs=server_status)
-        
         with gr.Tab("📷 图文问答 VQA"):
-            gr.Markdown("### 上传图片并提出问题,AI 将为您解答")
             with gr.Row():
                 with gr.Column(scale=1):
                     vqa_image = gr.Image(
                         label="📤 上传图片", 
                         type="pil", 
-                        height=300,
-                        sources=["upload", "clipboard"],
-                        show_label=True
+                        height=350,
+                        sources=["upload", "clipboard"]
                     )
                     vqa_question = gr.Textbox(
-                        label="❓ 请输入您的问题", 
-                        placeholder="例如:图片中有什么?这是什么场景?主要物体是什么?", 
-                        lines=3,
-                        max_lines=5
+                        label="❓ 问题", 
+                        placeholder="图片中有什么?", 
+                        lines=2
                     )
                     with gr.Row():
+                        vqa_submit = gr.Button(
+                            "开始分析", 
+                            variant="primary", 
+                            size="sm", 
+                            scale=2
+                        )
                         vqa_clear = gr.ClearButton(
                             [vqa_image, vqa_question],
-                            value="🗑️ 清空", 
+                            value="清空", 
                             size="sm",
                             scale=1
-                        )
-                        vqa_submit = gr.Button(
-                            "🚀 开始分析", 
-                            variant="primary", 
-                            size="lg", 
-                            scale=3
                         )
                 
                 with gr.Column(scale=1):
                     vqa_answer = gr.Textbox(
                         label="💬 AI 回答", 
-                        lines=13, 
+                        lines=18, 
                         interactive=False
                     )
             
-            with gr.Accordion("💡 示例问题", open=True):
-                gr.Examples(
-                    examples=[
-                        ["图片中有什么?"], 
-                        ["描述这张图片的内容"], 
-                        ["主要物体是什么颜色?"],
-                        ["这是什么场景?"],
-                        ["画面中有几个人?"]
-                    ], 
-                    inputs=vqa_question
-                )
+            gr.Examples(
+                examples=[
+                    ["图片中有什么?"], 
+                    ["描述这张图片"], 
+                    ["主要物体是什么?"],
+                    ["这是什么场景?"]
+                ], 
+                inputs=vqa_question,
+                label="💡 示例"
+            )
             
             vqa_submit.click(vqa_inference, [vqa_image, vqa_question], vqa_answer)
         
-        with gr.Tab("🔍 文本搜图 Search"):
-            gr.Markdown("### 输入文本描述,从图片库中检索最相关的图片")
+        with gr.Tab("🔍 文本搜图"):
             with gr.Row():
                 with gr.Column(scale=1):
                     search_text = gr.Textbox(
-                        label="🔎 搜索描述", 
-                        placeholder="例如:一只可爱的猫、美丽的日落、繁华的城市夜景...", 
-                        lines=3,
-                        max_lines=5
+                        label="🔎 搜索", 
+                        placeholder="一只可爱的猫", 
+                        lines=2
                     )
                     search_top_k = gr.Slider(
-                        label="📊 返回数量", 
+                        label="返回数量", 
                         minimum=1, 
                         maximum=config.MAX_TOP_K, 
                         value=config.DEFAULT_TOP_K, 
-                        step=1,
-                        info="选择要返回的图片数量"
+                        step=1
                     )
                     with gr.Row():
+                        search_btn = gr.Button(
+                            "开始检索", 
+                            variant="primary", 
+                            size="sm", 
+                            scale=2
+                        )
                         search_clear = gr.ClearButton(
                             [search_text],
-                            value="🗑️ 清空", 
+                            value="清空", 
                             size="sm",
                             scale=1
                         )
-                        search_btn = gr.Button(
-                            "🔍 开始检索", 
-                            variant="primary", 
-                            size="lg", 
-                            scale=3
-                        )
                     search_info = gr.Textbox(
                         label="📋 检索结果", 
-                        lines=9, 
+                        lines=12, 
                         interactive=False
                     )
                 
@@ -212,56 +194,30 @@ def build_interface():
                     search_gallery = gr.Gallery(
                         label="🖼️ 匹配图片", 
                         columns=3, 
-                        rows=3, 
-                        height=500,
-                        object_fit="contain",
-                        show_label=True
+                        rows=2, 
+                        height=450,
+                        object_fit="contain"
                     )
             
-            with gr.Accordion("💡 搜索示例", open=True):
-                gr.Examples(
-                    examples=[
-                        ["可爱的猫咪"], 
-                        ["壮丽的日落风景"], 
-                        ["繁华的城市夜景"],
-                        ["美丽的花朵"],
-                        ["雪山风光"]
-                    ], 
-                    inputs=search_text
-                )
+            gr.Examples(
+                examples=[
+                    ["可爱的猫咪"], 
+                    ["日落风景"], 
+                    ["城市夜景"],
+                    ["美丽的花朵"]
+                ], 
+                inputs=search_text,
+                label="💡 示例"
+            )
             
             search_btn.click(text2image_search, [search_text, search_top_k], [search_gallery, search_info])
         
-        gr.Markdown("---")
-        
-        with gr.Accordion("📖 使用说明", open=False):
+        with gr.Accordion("ℹ️ 说明", open=False):
             gr.Markdown(
                 """
-                ### 📷 图文问答功能
-                1. **上传图片**: 点击上传区域或拖拽图片
-                2. **输入问题**: 在文本框中输入您的问题
-                3. **获取答案**: 点击「开始分析」按钮,AI 将分析图片并回答
-                
-                ### 🔍 文本搜图功能
-                1. **输入描述**: 在搜索框中输入图片的文本描述
-                2. **设置数量**: 调整滑块选择返回图片数量(1-10张)
-                3. **开始检索**: 点击「开始检索」按钮查看匹配结果
-                
-                ### 💡 提示
-                - 支持中英文问答和搜索
-                - 图片格式支持: JPG、PNG、WebP 等
-                - 首次推理可能较慢,请耐心等待
-                - 确保服务器已启动并连接正常
-                """
-            )
-        
-        with gr.Accordion("⚙️ 技术说明", open=False):
-            gr.Markdown(
-                """
-                - **VQA 模型**: Qwen2.5-VL-3B-Instruct (4-bit量化)
-                - **检索模型**: CLIP 中文版跨模态检索
-                - **架构**: FastAPI 服务端 + Gradio 客户端
-                - **GPU 要求**: 推荐 12GB+ 显存
+                **技术栈**: Qwen2.5-VL-3B (4-bit量化) + CLIP 中文版  
+                **支持**: 中英文问答 | JPG/PNG/WebP  
+                **提示**: 首次推理较慢，请耐心等待
                 """
             )
     

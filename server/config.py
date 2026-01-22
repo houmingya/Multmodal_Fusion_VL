@@ -33,7 +33,7 @@ VQA_QUANTIZATION_CONFIG = {
     "load_in_4bit": True,
     "bnb_4bit_quant_type": "nf4",
     "bnb_4bit_compute_dtype": torch.float16,
-    "bnb_4bit_use_double_quant": True,  # 双量化进一步节省显存
+    "bnb_4bit_use_double_quant": False,  # 关闭双量化，提高精度但会增加显存占用
 }
 
 # VQA 推理参数
