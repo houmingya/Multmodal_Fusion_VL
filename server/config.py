@@ -30,16 +30,16 @@ VQA_LOCAL_MODEL_PATH = "/home/ckai/.cache/modelscope/hub/Qwen/Qwen2.5-VL-3B-Inst
 
 # VQA 量化配置
 VQA_QUANTIZATION_CONFIG = {
-    "load_in_4bit": True,
+    "load_in_4bit": False,
     "bnb_4bit_quant_type": "nf4",
     "bnb_4bit_compute_dtype": torch.float16,
-    "bnb_4bit_use_double_quant": False,  # 关闭双量化，提高精度但会增加显存占用
+    "bnb_4bit_use_double_quant": False,  # 双量化进一步节省显存
 }
 
 # VQA 推理参数
 VQA_GENERATION_CONFIG = {
     "max_new_tokens": 128,  # 减少生成长度以节省显存
-    "do_sample": False,     # 使用贪心解码而非采样
+    "do_sample": False,    # False=贪心解码(稳定), True=采样(多样性)
     "num_beams": 1,         # 不使用束搜索
 }
 
