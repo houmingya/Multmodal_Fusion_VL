@@ -128,8 +128,7 @@ def build_interface():
                         type="pil", 
                         height=300,
                         sources=["upload", "clipboard"],
-                        show_label=True,
-                        file_types=[f".{ext}" for ext in config.ALLOWED_IMAGE_TYPES]
+                        show_label=True
                     )
                     vqa_question = gr.Textbox(
                         label="❓ 请输入您的问题", 

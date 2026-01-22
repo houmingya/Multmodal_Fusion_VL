@@ -25,6 +25,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # ====================================
 # VQA 模型配置
 VQA_MODEL_ID = "Qwen/Qwen2.5-VL-3B-Instruct"
+# 本地模型路径（如果已下载，直接指定路径，留空则自动下载）
+VQA_LOCAL_MODEL_PATH = "/home/ckai/.cache/modelscope/hub/Qwen/Qwen2.5-VL-3B-Instruct"
 
 # VQA 量化配置
 VQA_QUANTIZATION_CONFIG = {
@@ -43,6 +45,8 @@ VQA_GENERATION_CONFIG = {
 
 # CLIP 模型配置
 CLIP_MODEL_ID = "iic/multi-modal_clip-vit-base-patch16_zh"
+# 本地模型路径（如果已下载，直接指定路径，留空则自动下载）
+CLIP_LOCAL_MODEL_PATH = "/home/ckai/.cache/modelscope/hub/iic/multi-modal_clip-vit-base-patch16_zh"
 
 # CLIP 图像预处理配置
 CLIP_IMAGE_SIZE = (224, 224)

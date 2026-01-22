@@ -15,6 +15,12 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from PIL import Image
 import logging
+import ssl
+import certifi
+
+# 禁用SSL证书验证（解决ModelScope下载问题）
+ssl._create_default_https_context = ssl._create_unverified_context
+
 from modelscope import snapshot_download
 # 直接导入 Qwen2.5 VL 的特定类
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, BitsAndBytesConfig
@@ -40,7 +46,7 @@ clip_preprocessor = None
 clip_tokenizer = None
 image_library = {}
 
-def load_vqa_model():
+def load_vqa_model(): # VQA 是 Visual Question Answering（视觉问答）的缩写
     """
     加载 Qwen2.5-VL-3B-Instruct 模型
     """
@@ -49,8 +55,31 @@ def load_vqa_model():
         model_id = config.VQA_MODEL_ID
         logger.info(f"正在加载 VQA 模型: {model_id} ...")
 
-        # 1. 下载模型
-        model_dir = snapshot_download(model_id)
+        # 1. 优先使用配置的本地路径，否则尝试自动查找缓存，最后才下载
+        if config.VQA_LOCAL_MODEL_PATH and os.path.exists(config.VQA_LOCAL_MODEL_PATH):
+            logger.info(f"使用配置的本地模型: {config.VQA_LOCAL_MODEL_PATH}")
+            model_dir = config.VQA_LOCAL_MODEL_PATH
+        else:
+            # 尝试查找 ModelScope 缓存
+            cache_dir = os.path.expanduser("~/.cache/modelscope/hub")
+            # ModelScope 可能使用多种命名方式
+            possible_paths = [
+                os.path.join(cache_dir, model_id.replace("/", "---")),
+                os.path.join(cache_dir, model_id.replace("/", "/")),
+                os.path.join(cache_dir, model_id),
+            ]
+            
+            model_dir = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    logger.info(f"找到本地缓存模型: {path}")
+                    model_dir = path
+                    break
+            
+            if not model_dir:
+                logger.info(f"本地模型不存在，开始下载...")
+                logger.info(f"提示：如已下载，请在 config.py 中设置 VQA_LOCAL_MODEL_PATH")
+                model_dir = snapshot_download(model_id)
 
         # 2. 加载模型
         # 使用 Qwen2_5_VLForConditionalGeneration 类
@@ -95,12 +124,38 @@ def load_clip_model():
         from modelscope import Model, AutoTokenizer
 
         model_id = config.CLIP_MODEL_ID
-
-        clip_model = Model.from_pretrained(model_id)
+        
+        # 优先使用配置的本地路径
+        if config.CLIP_LOCAL_MODEL_PATH and os.path.exists(config.CLIP_LOCAL_MODEL_PATH):
+            logger.info(f"使用配置的本地模型: {config.CLIP_LOCAL_MODEL_PATH}")
+            model_dir = config.CLIP_LOCAL_MODEL_PATH
+        else:
+            # 尝试查找 ModelScope 缓存
+            cache_dir = os.path.expanduser("~/.cache/modelscope/hub")
+            possible_paths = [
+                os.path.join(cache_dir, model_id.replace("/", "---")),
+                os.path.join(cache_dir, model_id.replace("/", "/")),
+                os.path.join(cache_dir, model_id),
+            ]
+            
+            model_dir = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    logger.info(f"找到本地缓存模型: {path}")
+                    model_dir = path
+                    break
+            
+            if not model_dir:
+                logger.info(f"本地模型不存在，开始下载...")
+                logger.info(f"提示：如已下载，请在 config.py 中设置 CLIP_LOCAL_MODEL_PATH")
+                model_dir = model_id  # 让 ModelScope 自动下载
+        
+        clip_model = Model.from_pretrained(model_dir)
         clip_model.to(config.DEVICE)
         clip_model.eval()
 
-        clip_tokenizer = AutoTokenizer.from_pretrained(model_id)
+        # tokenizer 使用相同的路径
+        clip_tokenizer = AutoTokenizer.from_pretrained(model_dir if model_dir != model_id else model_id)
 
         from torchvision import transforms
         clip_preprocessor = transforms.Compose([
