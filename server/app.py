@@ -8,24 +8,32 @@
 import os
 import io
 import gc
+import ssl
+import logging
+from typing import Optional
+
 import torch
 import numpy as np
-from typing import Optional
+from PIL import Image
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
-from PIL import Image
-import logging
-import ssl
+
 import certifi
+
+# ModelScope 相关
+from modelscope import Model, AutoTokenizer, snapshot_download
+
+# Transformers 相关
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, BitsAndBytesConfig
+from torchvision import transforms
+
+# 本地工具/配置
+from qwen_vl_utils import process_vision_info
+import config
 
 # 禁用SSL证书验证（解决ModelScope下载问题）
 ssl._create_default_https_context = ssl._create_unverified_context
-
-from modelscope import snapshot_download
-# 直接导入 Qwen2.5 VL 的特定类
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, BitsAndBytesConfig
-from qwen_vl_utils import process_vision_info
-import config
 
 # 配置日志
 logging.basicConfig(level=config.LOG_LEVEL)
@@ -39,12 +47,12 @@ os.makedirs(config.IMAGE_LIBRARY_PATH, exist_ok=True)
 # ====================================
 app = FastAPI(title="多模态融合服务", description="VQA图文问答 (Qwen2.5-VL-3B) + 文搜图服务")
 
-vqa_model = None
-vqa_processor = None
-clip_model = None
-clip_preprocessor = None
-clip_tokenizer = None
-image_library = {}
+vqa_model = None           # Qwen2.5-VL-3B-Instruct 视觉问答模型实例
+vqa_processor = None       # Qwen2.5-VL-3B-Instruct 处理器（文本/图片预处理）
+clip_model = None          # CLIP 图文检索模型实例
+clip_preprocessor = None   # CLIP 图像预处理（归一化、缩放等）
+clip_tokenizer = None      # CLIP 文本分词器
+image_library = {}         # 图片库特征索引（文件名->特征向量）
 
 def load_vqa_model(): # VQA 是 Visual Question Answering（视觉问答）的缩写
     """
@@ -121,7 +129,6 @@ def load_clip_model():
     global clip_model, clip_preprocessor, clip_tokenizer
     try:
         logger.info("正在加载 CLIP 中文轻量模型...")
-        from modelscope import Model, AutoTokenizer
 
         model_id = config.CLIP_MODEL_ID
         
@@ -154,10 +161,21 @@ def load_clip_model():
         clip_model.to(config.DEVICE)
         clip_model.eval()
 
-        # tokenizer 使用相同的路径
-        clip_tokenizer = AutoTokenizer.from_pretrained(model_dir if model_dir != model_id else model_id)
+        # clip_tokenizer 作用说明：
+        # CLIP 的分词器（tokenizer）用于将输入的文本（如检索关键词、描述等）
+        # 转换为模型可处理的 token 序列（张量），以便后续送入 CLIP 模型进行特征编码。
+        # 在文本检索图片时，所有文本输入都需先经过分词器编码，
+        # 得到的 token id 张量再输入到 clip_model.clip_model.encode_text 方法中，
+        # 最终获得文本的特征向量，实现跨模态检索。
+        clip_tokenizer = AutoTokenizer.from_pretrained(
+            model_dir if model_dir != model_id else model_id
+        )
 
-        from torchvision import transforms
+        # clip_preprocessor 作用说明：
+        # 1. Resize：将输入图片缩放到CLIP模型要求的尺寸（config.CLIP_IMAGE_SIZE），保证输入一致性。
+        # 2. ToTensor：将PIL图片转换为PyTorch张量，便于后续深度学习处理。
+        # 3. Normalize：对张量进行归一化处理，使用CLIP模型训练时的均值和标准差（config.CLIP_NORMALIZE_MEAN, config.CLIP_NORMALIZE_STD），
+        #    使输入分布与预训练模型一致，提升特征提取效果。
         clip_preprocessor = transforms.Compose([
             transforms.Resize(config.CLIP_IMAGE_SIZE),
             transforms.ToTensor(),
@@ -182,12 +200,13 @@ def build_image_library():
     global image_library
     try:
         logger.info(f"构建图片库索引: {config.IMAGE_LIBRARY_PATH} ...")
+        # 图片格式
         valid_extensions = config.VALID_IMAGE_EXTENSIONS
         
         if not os.path.exists(config.IMAGE_LIBRARY_PATH):
             logger.warning(f"⚠ 图片库目录不存在: {config.IMAGE_LIBRARY_PATH}")
             return
-            
+        # 过滤有效图片文件   
         image_files = [f for f in os.listdir(config.IMAGE_LIBRARY_PATH) 
                       if os.path.splitext(f.lower())[1] in valid_extensions]
 
@@ -199,14 +218,21 @@ def build_image_library():
             img_path = os.path.join(config.IMAGE_LIBRARY_PATH, img_file)
             try:
                 image = Image.open(img_path).convert("RGB")
+                # 1. 使用clip_preprocessor对图片进行缩放、归一化等预处理
+                # 2. unsqueeze(0)将图片张量扩展为batch维度（形状变为[1, C, H, W]），适配模型输入
+                # 3. to(config.DEVICE)将张量移动到指定设备（如GPU），加速特征提取
                 image_tensor = clip_preprocessor(image).unsqueeze(0).to(config.DEVICE)
                 
                 with torch.no_grad():
-                    # 使用 ModelScope CLIP 的 encode_image 方法
+                    # 使用 ModelScope CLIP 的 encode_image 方法：
+                    # 将预处理后的图片张量输入CLIP模型，提取图片的高维特征向量（embedding），
+                    # 该特征可用于后续与文本特征做相似度检索，实现跨模态搜索。
+                    # 返回结果为图片的特征张量，shape一般为[1, embedding_dim]。
                     image_features = clip_model.clip_model.encode_image(image_tensor)
                     # 归一化
                     image_features = image_features / image_features.norm(dim=-1, keepdim=True)
                 
+                # 将特征张量从GPU转到CPU，并转换为NumPy数组，方便后续检索和存储
                 image_library[img_file] = image_features.cpu().numpy()
             except Exception as e:
                 logger.warning(f"处理图片 {img_file} 失败: {e}")
@@ -251,22 +277,35 @@ async def visual_question_answering(
         ]
 
         # 3. 预处理
+        # 使用Qwen2.5-VL的apply_chat_template方法：
+        # 1. 将多模态消息（图片+文本）格式化为模型所需的输入字符串，
+        #    保证图片和问题以正确的prompt格式传递给大模型。
+        # 2. tokenize=False表示只生成字符串，不做分词，后续由processor统一处理。
+        # 3. add_generation_prompt=True会在末尾自动补充生成指令，
+        #    让模型知道需要输出答案。
         text = vqa_processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
 
+        # 解析多模态消息，提取图片和视频内容，
+        # 并转换为模型输入所需的格式（如PIL图片转为张量等）。
+        # 返回值：image_inputs为图片输入列表，video_inputs为视频输入列表（本场景一般只用图片）。
         image_inputs, video_inputs = process_vision_info(messages)
 
         inputs = vqa_processor(
             text=[text],
             images=image_inputs,
             videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
+            padding=True,           # 自动对输入序列进行padding，保证batch内长度一致
+            return_tensors="pt",   # 返回PyTorch张量格式，便于直接送入模型
         )
         inputs = inputs.to(config.DEVICE)
 
         # 4. 推理 - 使用更保守的参数
+        # 使用VQA模型进行推理：
+        # 1. torch.no_grad()上下文可关闭梯度计算，节省显存和加速推理。
+        # 2. vqa_model.generate方法根据输入内容（图片+问题）生成答案的token序列。
+        # 3. config.VQA_GENERATION_CONFIG可控制生成长度、采样方式等参数。
         with torch.no_grad():
             generated_ids = vqa_model.generate(
                 **inputs, 
